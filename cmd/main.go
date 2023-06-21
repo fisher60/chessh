@@ -1,29 +1,28 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"strings"
-
-	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 )
 
 type userSession struct {
-	session  ssh.Session
-	terminal *terminal.Terminal
+	Session ssh.Session
+	Message string
 }
 
-func newUserSession(s ssh.Session, t *terminal.Terminal) *userSession {
-	us := userSession{session: s, terminal: t}
+func newUserSession(s ssh.Session, m string) *userSession {
+	us := userSession{Session: s, Message: m}
 	return &us
 }
 
 var messageQueue []string
-var sshSessions = make(map[string]userSession)
+var sshSessions = make(map[string]*userSession)
 
 func formatMessageQueue(mq []string) string {
 	return strings.Join(mq, "\n")
@@ -33,7 +32,7 @@ func addMessageToQueue(m string) {
 	messageQueue = append(messageQueue, m)
 
 	for _, us := range sshSessions {
-		renderTerminal(us)
+		renderTerminal(*us)
 	}
 }
 
@@ -42,33 +41,47 @@ func clearSession(s ssh.Session) {
 }
 
 func renderTerminal(us userSession) {
-	clearSession(us.session)
-	io.WriteString(us.session, fmt.Sprintf("Chat -- %s\n\n", us.session.User()))
-	io.WriteString(us.session, fmt.Sprintf("%s\n", formatMessageQueue(messageQueue)))
+	clearSession(us.Session)
+	io.WriteString(us.Session, fmt.Sprintf("Chat -- %s\n\n", us.Session.User()))
+	io.WriteString(us.Session, fmt.Sprintf("%s\n", formatMessageQueue(messageQueue)))
+	io.WriteString(us.Session, fmt.Sprintf("> %s", us.Message))
 
 }
 
 func chessHandler(s ssh.Session) {
-	term := terminal.NewTerminal(s, "> ")
-
 	userUUID := uuid.New().String()
-	userSession := *newUserSession(s, term)
-	sshSessions[string(userUUID)] = userSession
+	userSession := *newUserSession(s, "")
+	sshSessions[string(userUUID)] = &userSession
 
 	renderTerminal(userSession)
 
-	line := ""
+	reader := bufio.NewReader(s)
+	keyPress := make(chan rune)
+
+	go func() {
+		for {
+			r, _ := reader.ReadByte()
+			keyPress <- rune(r)
+		}
+	}()
 
 	for {
-		line, _ = userSession.terminal.ReadLine()
-		if line == "quit" {
-			break
+		select {
+		case key := <-keyPress:
+			if key == 0xD {
+				addMessageToQueue(fmt.Sprintf("%s: %s", s.User(), userSession.Message))
+				userSession.Message = ""
+			} else if key == 0x7f {
+				log.Println("Backspace")
+				userSession.Message = userSession.Message[:len(userSession.Message)-1]
+			} else {
+				userSession.Message = userSession.Message + string(key)
+			}
+			renderTerminal(userSession)
 		}
-
-		addMessageToQueue(fmt.Sprintf("%s: %s", s.User(), line))
 	}
 
-	delete(sshSessions, string(userUUID))
+	// delete(sshSessions, string(userUUID))
 
 }
 
