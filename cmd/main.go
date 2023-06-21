@@ -65,15 +65,19 @@ func chessHandler(s ssh.Session) {
 		}
 	}()
 
+MainLoop:
 	for {
 		select {
 		case key := <-keyPress:
-			if key == 0xD {
+			if key == 0xD { // Enter
 				addMessageToQueue(fmt.Sprintf("%s: %s", s.User(), userSession.Message))
 				userSession.Message = ""
-			} else if key == 0x7f {
-				log.Println("Backspace")
+
+			} else if key == 0x7f && len(userSession.Message) > 0 { // Backspace
 				userSession.Message = userSession.Message[:len(userSession.Message)-1]
+			} else if key == 0x1b {
+				delete(sshSessions, string(userUUID))
+				break MainLoop
 			} else {
 				userSession.Message = userSession.Message + string(key)
 			}
@@ -81,13 +85,11 @@ func chessHandler(s ssh.Session) {
 		}
 	}
 
-	// delete(sshSessions, string(userUUID))
-
 }
 
 func main() {
 	ssh.Handle(chessHandler)
 
 	log.Println("starting ssh server on port 2222...")
-	log.Fatal(ssh.ListenAndServe("localhost:2222", nil, ssh.HostKeyFile(".ssh/term_info_ed25519")))
+	log.Fatal(ssh.ListenAndServe("0.0.0.0:2222", nil, ssh.HostKeyFile("/.ssh/id_ed25519")))
 }

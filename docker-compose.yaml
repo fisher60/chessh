@@ -1,0 +1,12 @@
+services:
+
+  ssh:
+    build:
+      context: .
+    volumes: 
+      - .ssh:/.ssh
+    ports:
+      - "2222:2222"
+
+volumes: 
+  .ssh:
