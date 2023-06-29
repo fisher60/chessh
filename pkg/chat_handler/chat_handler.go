@@ -37,11 +37,11 @@ func renderTerminal(us session.UserSession) {
 
 }
 
-func ChatHandler(s ssh.Session, us session.UserSession) {
+func ChatHandler(us session.UserSession) {
 
 	renderTerminal(us)
 
-	reader := bufio.NewReader(s)
+	reader := bufio.NewReader(us.Session)
 	keyPress := make(chan rune)
 
 	go func() {
@@ -57,7 +57,7 @@ MainLoop:
 		case key := <-keyPress:
 			if key == 0xD { // Enter
 				// When enter key is pressed, send the message to the chat
-				addMessageToQueue(fmt.Sprintf("%s: %s", s.User(), us.Message))
+				addMessageToQueue(fmt.Sprintf("%s: %s", us.Session.User(), us.Message))
 				us.Message = ""
 
 			} else if key == 0x7f && len(us.Message) > 0 { // Backspace

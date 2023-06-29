@@ -13,5 +13,5 @@ func ConnectionHandler(s ssh.Session) {
 	userSession := *session.NewUserSession(s, "")
 	menu_handler.SshSessions[string(userUUID)] = &userSession
 
-	chat_handler.ChatHandler(s, userSession)
+	chat_handler.ChatHandler(userSession)
 }
