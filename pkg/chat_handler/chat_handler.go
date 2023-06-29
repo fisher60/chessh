@@ -6,13 +6,12 @@ import (
 	"io"
 	"strings"
 
+	"github.com/fisher60/chessh/pkg/menu_handler"
 	"github.com/fisher60/chessh/pkg/session"
 	"github.com/gliderlabs/ssh"
-	"github.com/google/uuid"
 )
 
 var messageQueue []string
-var sshSessions = make(map[string]*session.UserSession)
 
 func formatMessageQueue(mq []string) string {
 	return strings.Join(mq, "\n")
@@ -21,7 +20,7 @@ func formatMessageQueue(mq []string) string {
 func addMessageToQueue(m string) {
 	messageQueue = append(messageQueue, m)
 
-	for _, us := range sshSessions {
+	for _, us := range menu_handler.SshSessions {
 		renderTerminal(*us)
 	}
 }
@@ -38,12 +37,9 @@ func renderTerminal(us session.UserSession) {
 
 }
 
-func ChatHandler(s ssh.Session) {
-	userUUID := uuid.New().String()
-	userSession := *session.NewUserSession(s, "")
-	sshSessions[string(userUUID)] = &userSession
+func ChatHandler(s ssh.Session, us session.UserSession) {
 
-	renderTerminal(userSession)
+	renderTerminal(us)
 
 	reader := bufio.NewReader(s)
 	keyPress := make(chan rune)
@@ -60,18 +56,22 @@ MainLoop:
 		select {
 		case key := <-keyPress:
 			if key == 0xD { // Enter
-				addMessageToQueue(fmt.Sprintf("%s: %s", s.User(), userSession.Message))
-				userSession.Message = ""
+				// When enter key is pressed, send the message to the chat
+				addMessageToQueue(fmt.Sprintf("%s: %s", s.User(), us.Message))
+				us.Message = ""
 
-			} else if key == 0x7f && len(userSession.Message) > 0 { // Backspace
-				userSession.Message = userSession.Message[:len(userSession.Message)-1]
-			} else if key == 0x1b {
-				delete(sshSessions, string(userUUID))
+			} else if key == 0x7f && len(us.Message) > 0 { // Backspace
+				// When backspace key is pressed, delete the most recent character from message buffer
+				us.Message = us.Message[:len(us.Message)-1]
+			} else if key == 0x1b { // Escape
+				// When escape key is pressed, exit the chat
+				delete(menu_handler.SshSessions, us.Uuid)
 				break MainLoop
 			} else {
-				userSession.Message = userSession.Message + string(key)
+				// If the key did not match a special/defined character, add the character to message buffer
+				us.Message = us.Message + string(key)
 			}
-			renderTerminal(userSession)
+			renderTerminal(us)
 		}
 	}
 
